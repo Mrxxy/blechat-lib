@@ -205,6 +205,11 @@ public class BLEPeripheralHelper {
         }
     }
 
+    public void disconnect(BluetoothDevice device) {
+        if (mGattServer != null) {
+            mGattServer.cancelConnection(device);
+        }
+    }
 
     public void init(Context context) {
         if (context == null) {
