@@ -1,5 +1,6 @@
 package com.wx.blechat;
 
+import android.annotation.SuppressLint;
 import android.annotation.TargetApi;
 import android.bluetooth.BluetoothAdapter;
 import android.bluetooth.BluetoothDevice;
@@ -46,6 +47,7 @@ import java.util.UUID;
  * <p>
  * Use init() no initialize the class
  */
+@SuppressLint("MissingPermission")
 public class BLECentralHelper {
 
     private static final String TAG = "BLECentralHelper";
@@ -74,6 +76,8 @@ public class BLECentralHelper {
     private Handler mHandler = new Handler();
 
     private Context mContext;
+
+    private boolean isScanning = false;
 
     private static BLECentralHelper instance = new BLECentralHelper();
 
@@ -232,21 +236,40 @@ public class BLECentralHelper {
      * This is a passive action, it will listen advertisements from other peripheral devices
      */
     public void startScan() {
-        ScanFilter scanFilter = new ScanFilter.Builder()
-                .setServiceUuid(new ParcelUuid(BLEChatProfile.SERVICE_UUID))
-                .build();
-        ArrayList<ScanFilter> filters = new ArrayList<ScanFilter>();
-        filters.add(scanFilter);
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.LOLLIPOP) {
+            if (isScanning) return;
+            isScanning = true;
+            mBluetoothAdapter.startLeScan(new UUID[]{BLEChatProfile.SERVICE_UUID}, leScanCallback);
+        } else {
+            ScanFilter scanFilter = new ScanFilter.Builder()
+                    .setServiceUuid(new ParcelUuid(BLEChatProfile.SERVICE_UUID))
+                    .build();
+            ArrayList<ScanFilter> filters = new ArrayList<ScanFilter>();
+            filters.add(scanFilter);
 
-        ScanSettings settings = new ScanSettings.Builder()
-                .setScanMode(ScanSettings.SCAN_MODE_BALANCED)
-                .build();
-        mBluetoothAdapter.getBluetoothLeScanner().startScan(filters, settings, mScanCallback);
+            ScanSettings settings = new ScanSettings.Builder()
+                    .setScanMode(ScanSettings.SCAN_MODE_BALANCED)
+                    .build();
+            mBluetoothAdapter.getBluetoothLeScanner().startScan(filters, settings, mScanCallback);
+        }
     }
 
     public void stopScan() {
-        mBluetoothAdapter.getBluetoothLeScanner().stopScan(mScanCallback);
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.LOLLIPOP) {
+            isScanning = false;
+            mBluetoothAdapter.stopLeScan(leScanCallback);
+        } else {
+            mBluetoothAdapter.getBluetoothLeScanner().stopScan(mScanCallback);
+        }
     }
+
+    private BluetoothAdapter.LeScanCallback leScanCallback = new BluetoothAdapter.LeScanCallback() {
+        @Override
+        public void onLeScan(BluetoothDevice device, int rssi, byte[] scanRecord) {
+            Log.d(TAG, "onLeScan: ");
+            notifyDisListeners(NotifyDisAction.NOTIFY_DIS_ACTION_SCAN_RESULT, device, rssi);
+        }
+    };
 
     private ScanCallback mScanCallback = new ScanCallback() {
         @Override
@@ -258,9 +281,6 @@ public class BLECentralHelper {
         @Override
         public void onBatchScanResults(List<ScanResult> results) {
             Log.d(TAG, "onBatchScanResults: " + results.size() + " results");
-            for (ScanResult result : results) {
-                processResult(result);
-            }
         }
 
         @Override
@@ -276,12 +296,11 @@ public class BLECentralHelper {
         }
     };
 
-    /*
+    /**
      * Connect to a Bluetooth device
      *
      * @param context
      * @param device
-     * @param events
      */
     public void connect(Context context, BluetoothDevice device) {
         mConnectedGatt = device.connectGatt(context, false, mGattCallback);
@@ -357,7 +376,7 @@ public class BLECentralHelper {
 
             if (status == BluetoothGatt.GATT_SUCCESS) {
                 if (newState == BluetoothProfile.STATE_CONNECTED) {
-                    gatt.discoverServices();
+                    mConnectedGatt.discoverServices();
                 } else if (newState == BluetoothProfile.STATE_DISCONNECTED) {
                     mHandler.post(new Runnable() {
                         @Override
@@ -515,7 +534,7 @@ public class BLECentralHelper {
                 .getService(BLEChatProfile.SERVICE_UUID)
                 .getCharacteristic(BLEChatProfile.CHARACTERISTIC_MESSAGE_UUID);
 
-        characteristic.setWriteType(BluetoothGattCharacteristic.WRITE_TYPE_DEFAULT);
+        characteristic.setWriteType(BluetoothGattCharacteristic.WRITE_TYPE_NO_RESPONSE);
         characteristic.setValue(data);
         if (!mConnectedGatt.writeCharacteristic(characteristic)) {
             notifyChatListeners(NotifyChatAction.NOTIFY_CHAT_ACTION_CONNECTION_ERROR, "Couldn't send data!!");
