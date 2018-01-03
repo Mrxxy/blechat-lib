@@ -266,6 +266,7 @@ public class BLECentralHelper {
         @Override
         public void onScanFailed(int errorCode) {
             Log.w(TAG, "LE Scan Failed: " + errorCode);
+            notifyDisListeners(NotifyDisAction.NOTIFY_DIS_ACTION_SCAN_FAILED, "scan failed: " + errorCode);
         }
 
         private void processResult(ScanResult result) {
@@ -290,6 +291,17 @@ public class BLECentralHelper {
         if (mConnectedGatt != null) {
             mConnectedGatt.disconnect();
         }
+    }
+
+    /**
+     * prevent status 133
+     */
+    public void close() {
+        if (mConnectedGatt == null) return;
+        Log.d(TAG, "mConnectedGatt closed");
+        disconnect();
+        mConnectedGatt.close();
+        mConnectedGatt = null;
     }
 
     /**
@@ -350,6 +362,7 @@ public class BLECentralHelper {
                     mHandler.post(new Runnable() {
                         @Override
                         public void run() {
+                            close();
                             notifyChatListeners(NotifyChatAction.NOTIFY_CHAT_ACTION_DISCONNECT, null);
                         }
                     });
@@ -360,6 +373,7 @@ public class BLECentralHelper {
                 mHandler.post(new Runnable() {
                     @Override
                     public void run() {
+                        close();
                         notifyChatListeners(NotifyChatAction.NOTIFY_CHAT_ACTION_CONNECTION_ERROR, "Connection state error! : Error = " + finalStatus);
                     }
                 });
