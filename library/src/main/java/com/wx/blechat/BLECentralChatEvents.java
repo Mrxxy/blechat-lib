@@ -8,7 +8,6 @@ public interface BLECentralChatEvents extends BLEChatEvents {
     int MTU_CHANGE_FAILED = 1;
     void onConnect();
     void onDisconnect();
-    void onservicesDiscovered();
     void onVersion(String version);
     void onDescription(String description);
     void onRfcommConnect();
