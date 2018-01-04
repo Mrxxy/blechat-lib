@@ -161,6 +161,7 @@ public class BLECentralHelper {
         NOTIFY_CHAT_ACTION_STREAM_SENT,
         NOTIFY_CHAT_ACTION_INFO,
         NOTIFY_CHAT_ACTION_CONNECTION_ERROR,
+        NOTIFY_CHAT_ACTION_SERVICES_DISCOVERED
     }
 
     private void notifyChatListeners(NotifyChatAction action, Object data) {
@@ -205,6 +206,9 @@ public class BLECentralHelper {
                     break;
                 case NOTIFY_CHAT_ACTION_CONNECTION_ERROR:
                     callback.onConnectionError((String) data);
+                    break;
+                case NOTIFY_CHAT_ACTION_SERVICES_DISCOVERED:
+                    callback.onservicesDiscovered();
                     break;
                 default:
                     break;
@@ -386,6 +390,12 @@ public class BLECentralHelper {
             if (status == BluetoothGatt.GATT_SUCCESS) {
                 if (newState == BluetoothProfile.STATE_CONNECTED) {
                     mConnectedGatt.discoverServices();
+                    mHandler.post(new Runnable() {
+                        @Override
+                        public void run() {
+                            notifyChatListeners(NotifyChatAction.NOTIFY_CHAT_ACTION_CONNECT, null);
+                        }
+                    });
                 } else if (newState == BluetoothProfile.STATE_DISCONNECTED) {
                     mHandler.post(new Runnable() {
                         @Override
@@ -417,15 +427,7 @@ public class BLECentralHelper {
                 mHandler.post(new Runnable() {
                     @Override
                     public void run() {
-                        notifyChatListeners(NotifyChatAction.NOTIFY_CHAT_ACTION_CONNECT, null);
-                    }
-                });
-            } else {
-                mHandler.post(new Runnable() {
-                    @Override
-                    public void run() {
-                        close();
-                        notifyChatListeners(NotifyChatAction.NOTIFY_CHAT_ACTION_CONNECTION_ERROR, null);
+                        notifyChatListeners(NotifyChatAction.NOTIFY_CHAT_ACTION_SERVICES_DISCOVERED, null);
                     }
                 });
             }
