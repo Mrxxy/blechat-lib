@@ -35,6 +35,8 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.UUID;
 
+import static android.bluetooth.BluetoothDevice.TRANSPORT_LE;
+
 
 /**
  * This class will manage the Bluetooth LE Central stuff
@@ -303,12 +305,19 @@ public class BLECentralHelper {
      * @param device
      */
     public void connect(Context context, BluetoothDevice device) {
-        mConnectedGatt = device.connectGatt(context, false, mGattCallback);
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+            mConnectedGatt = device.connectGatt(context, false, mGattCallback, TRANSPORT_LE);
+        } else {
+            mConnectedGatt = device.connectGatt(context, false, mGattCallback);
+        }
     }
 
-    public void disconnect() {
+    public synchronized void disconnect() {
         if (mConnectedGatt != null) {
             mConnectedGatt.disconnect();
+        }
+        if (mHandler != null) {
+            mHandler.removeCallbacksAndMessages(null);
         }
     }
 
@@ -368,7 +377,7 @@ public class BLECentralHelper {
 
     public BluetoothGattCallback mGattCallback = new BluetoothGattCallback() {
         @Override
-        public void onConnectionStateChange(BluetoothGatt gatt, int status, int newState) {
+        public void onConnectionStateChange(BluetoothGatt gatt, final int status, int newState) {
             super.onConnectionStateChange(gatt, status, newState);
             Log.d(TAG, "onConnectionStateChange "
                     + BLEChatProfile.getStatusDescription(status) + " "
@@ -388,12 +397,11 @@ public class BLECentralHelper {
 
                 }
             } else {
-                final int finalStatus = status;
                 mHandler.post(new Runnable() {
                     @Override
                     public void run() {
                         close();
-                        notifyChatListeners(NotifyChatAction.NOTIFY_CHAT_ACTION_CONNECTION_ERROR, "Connection state error! : Error = " + finalStatus);
+                        notifyChatListeners(NotifyChatAction.NOTIFY_CHAT_ACTION_CONNECTION_ERROR, "Connection state error! : Error = " + status);
                     }
                 });
 
@@ -405,8 +413,24 @@ public class BLECentralHelper {
             super.onServicesDiscovered(gatt, status);
             Log.d(TAG, "onServicesDiscovered:");
 
+            if (status == BluetoothGatt.GATT_SUCCESS) {
+                mHandler.post(new Runnable() {
+                    @Override
+                    public void run() {
+                        notifyChatListeners(NotifyChatAction.NOTIFY_CHAT_ACTION_CONNECT, null);
+                    }
+                });
+            } else {
+                mHandler.post(new Runnable() {
+                    @Override
+                    public void run() {
+                        close();
+                        notifyChatListeners(NotifyChatAction.NOTIFY_CHAT_ACTION_CONNECTION_ERROR, null);
+                    }
+                });
+            }
+
             for (BluetoothGattService service : gatt.getServices()) {
-                Log.d(TAG, "Service: " + service.getUuid());
                 if (BLEChatProfile.SERVICE_UUID.equals(service.getUuid())) {
                     gatt.readCharacteristic(service.getCharacteristic(BLEChatProfile.CHARACTERISTIC_VERSION_UUID));
                     gatt.readCharacteristic(service.getCharacteristic(BLEChatProfile.CHARACTERISTIC_DESC_UUID));
@@ -415,12 +439,6 @@ public class BLECentralHelper {
                     gatt.setCharacteristicNotification(service.getCharacteristic(BLEChatProfile.CHARACTERISTIC_BLE_TRANSFER_UUID), true);
                 }
             }
-            mHandler.post(new Runnable() {
-                @Override
-                public void run() {
-                    notifyChatListeners(NotifyChatAction.NOTIFY_CHAT_ACTION_CONNECT, null);
-                }
-            });
         }
 
         @Override
